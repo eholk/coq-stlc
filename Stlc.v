@@ -87,3 +87,40 @@ Definition apply_k (k: StepCont) : StepCont :=
                                end
   end.
 
+Inductive steps_to_cont : StepCont -> Value -> Prop :=
+| step_refl : forall v, steps_to_cont (FinalK v) v
+| step_trans : forall s v, steps_to_cont (apply_k s) v -> steps_to_cont s v.
+
+Definition steps_to e v := steps_to_cont (step e (EmptyEnv Value) EmptyK) v.
+
+
+Inductive type_expr : (Env StlcType) -> Expr -> StlcType -> Prop :=
+| type_unit : forall env, type_expr env Unit TUnit.
+
+Inductive type_value : Value -> StlcType -> Prop :=
+| type_vunit : type_value VUnit TUnit.
+
+Inductive type_cont : (StlcType) -> Cont -> StlcType -> Prop :=
+| type_empty_k : forall t, type_cont t EmptyK t.
+
+Inductive type_step : StepCont -> StlcType -> Prop :=
+| type_final : forall v t, type_value v t -> type_step (FinalK v) t.
+
+Lemma preserve_step : forall t s s',
+  type_step s t -> s' = apply_k s -> type_step s' t.
+intros.
+induction H.
+simpl in H0; subst.
+auto using type_step.
+Qed.
+
+Theorem type_safe : forall e t v,
+  type_expr (EmptyEnv StlcType) e t
+  -> steps_to e v
+  -> type_value v t.
+intros. destruct H.
+assert (v = VUnit).
+compute in H0.
+inversion H0; subst. simpl in H.
+inversion H; subst.
+reflexivity.
