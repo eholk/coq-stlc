@@ -133,13 +133,29 @@ auto using type_value.
 auto using type_cont.
 Qed.
 
+Lemma preserve_steps_to_cont : forall t s v,
+  steps_to_cont s v ->
+  type_step s t ->
+  type_value v t.
+intros.
+induction H.
+inversion H0; subst; auto.
+apply IHsteps_to_cont.
+apply (preserve_step _ _ (apply_k s)) in H0.
+apply H0.
+reflexivity.
+Qed.
+
 Theorem type_safe : forall e t v,
   type_expr (EmptyEnv StlcType) e t
   -> steps_to e v
   -> type_value v t.
-intros. destruct H.
-assert (v = VUnit).
-compute in H0.
-inversion H0; subst. simpl in H.
-inversion H; subst.
-reflexivity.
+intros e t v H.
+induction H; intros.
+compute in H.
+apply (preserve_steps_to_cont TUnit) in H.
+apply H.
+apply (type_apply TUnit).
+auto using type_value.
+auto using type_cont.
+Qed.
