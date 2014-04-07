@@ -51,7 +51,7 @@ refine None.
 refine (if sym_beq x s then _ else _).
 refine (Some t).
 apply (lookup T x env).
-Qed.
+Defined.
 
 Inductive Cont :=
 | EmptyK : Cont
@@ -95,7 +95,8 @@ Definition steps_to e v := steps_to_cont (step e (EmptyEnv Value) EmptyK) v.
 
 
 Inductive type_expr : (Env StlcType) -> Expr -> StlcType -> Prop :=
-| type_unit : forall env, type_expr env Unit TUnit.
+| type_unit : forall env, type_expr env Unit TUnit
+| type_var : forall x t env, lookup x env = Some t -> type_expr env (Var x) t.
 
 Inductive type_value : Value -> StlcType -> Prop :=
 | type_vunit : type_value VUnit TUnit.
@@ -121,16 +122,18 @@ eauto using type_step.
 Qed.
 
 Lemma preserve_first : forall e t s,
-  type_expr (EmptyEnv _)  e t 
+  type_expr (EmptyEnv _) e t 
   -> step e (EmptyEnv _) EmptyK = s
   -> type_step s t.
 intros.
-induction H.
-compute in H0.
-subst.
+inversion H; subst.
+simpl.
 apply (type_apply TUnit).
 auto using type_value.
 auto using type_cont.
+contradict H1.
+compute.
+discriminate.
 Qed.
 
 Lemma preserve_steps_to_cont : forall t s v,
@@ -151,11 +154,13 @@ Theorem type_safe : forall e t v,
   -> steps_to e v
   -> type_value v t.
 intros e t v H.
-induction H; intros.
-compute in H.
-apply (preserve_steps_to_cont TUnit) in H.
-apply H.
+inversion H; subst; intros.
+compute in H0.
+apply (preserve_steps_to_cont TUnit) in H0.
+apply H0.
 apply (type_apply TUnit).
 auto using type_value.
 auto using type_cont.
+compute in H0.
+contradict H0; discriminate.
 Qed.
