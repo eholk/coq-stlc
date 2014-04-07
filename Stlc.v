@@ -96,10 +96,23 @@ Definition steps_to e v := steps_to_cont (step e (EmptyEnv Value) EmptyK) v.
 
 Inductive type_expr : (Env StlcType) -> Expr -> StlcType -> Prop :=
 | type_unit : forall env, type_expr env Unit TUnit
-| type_var : forall x t env, lookup x env = Some t -> type_expr env (Var x) t.
+| type_var : forall x t env, lookup x env = Some t -> type_expr env (Var x) t
+| type_lambda : forall env x b t' t,
+  type_expr (ExtendEnv _ x t' env) b t
+  -> type_expr env (Lambda x b) (Fn t' t).
 
 Inductive type_value : Value -> StlcType -> Prop :=
-| type_vunit : type_value VUnit TUnit.
+| type_vunit : type_value VUnit TUnit
+| type_closure : forall x b env tenv t' t,
+  related_env env tenv ->
+  type_expr (ExtendEnv _ x t' tenv) b t ->
+  type_value (Closure x b env) (Fn t' t)
+with related_env : (Env Value) -> (Env StlcType) -> Prop :=
+| relate_empty : related_env (EmptyEnv _) (EmptyEnv _)
+| relate_extend : forall x v t env tenv,
+  related_env env tenv ->
+  type_value v t ->
+  related_env (ExtendEnv _ x v env) (ExtendEnv _ x t tenv).
 
 Inductive type_cont : (StlcType) -> Cont -> StlcType -> Prop :=
 | type_empty_k : forall t, type_cont t EmptyK t.
@@ -112,12 +125,10 @@ Inductive type_step : StepCont -> StlcType -> Prop :=
 Lemma preserve_step : forall t s s',
   type_step s t -> s' = apply_k s -> type_step s' t.
 intros.
-induction H.
-simpl in H0; subst.
+inversion H; subst; intros.
 eauto using type_step.
-simpl in H0.
-inversion H; subst.
-inversion H1; subst.
+inversion H2; subst.
+simpl.
 eauto using type_step.
 Qed.
 
@@ -129,11 +140,18 @@ intros.
 inversion H; subst.
 simpl.
 apply (type_apply TUnit).
-auto using type_value.
-auto using type_cont.
+eauto using type_value.
+eauto using type_cont.
 contradict H1.
 compute.
 discriminate.
+compute.
+apply (type_apply (Fn t' t0)).
+apply (type_closure _ _ _ (EmptyEnv StlcType)).
+auto using related_env.
+inversion H; subst.
+apply H3.
+eauto using type_cont.
 Qed.
 
 Lemma preserve_steps_to_cont : forall t s v,
@@ -159,8 +177,15 @@ compute in H0.
 apply (preserve_steps_to_cont TUnit) in H0.
 apply H0.
 apply (type_apply TUnit).
-auto using type_value.
+eauto using type_value.
 auto using type_cont.
 compute in H0.
 contradict H0; discriminate.
+compute in H1.
+apply (preserve_steps_to_cont (Fn t' t0)) in H1; auto.
+apply (type_apply (Fn t' t0)).
+apply (type_closure _ _ _ (EmptyEnv _)).
+eauto using related_env.
+auto.
+eauto using type_cont.
 Qed.
