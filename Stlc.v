@@ -89,22 +89,32 @@ Fixpoint step (e: Expr) (env : Env Value) (k: Cont) : StepCont :=
     | App e1 e2 => step e1 env (RatorK e2 env k)
   end.
 
-Definition apply_k (k: StepCont) : StepCont :=
+Definition apply_k (k: Cont) v : StepCont :=
   match k with
-    | Error => Error
-    | ApplyK EmptyK v => FinalK v
-    | FinalK v => FinalK v
-    | ApplyK (RatorK e2 env k) v => step e2 env (RandK v k)
-    | ApplyK (RandK v' k) v => match v' with
-                                 | Closure x b env =>
-                                   step b (ExtendEnv Value x v env) k
-                                 | _ => Error
-                               end
+    | EmptyK => FinalK v
+    | RatorK e2 env k => step e2 env (RandK v k)
+    | RandK v' k => match v' with
+                      | Closure x b env =>
+                        step b (ExtendEnv Value x v env) k
+                      | _ => Error
+                    end
   end.
 
+Inductive step_cont : StepCont -> StepCont -> Prop :=
+| step_refl : forall s, step_cont s s
+| step_once : forall k v s,
+  step_cont (apply_k k v) s -> step_cont (ApplyK k v) s.
+
+Lemma step_trans : forall s1 s2 s3,
+  step_cont s1 s2 -> step_cont s2 s3 -> step_cont s1 s3.
+intros s1 s2 s3 H.
+induction H; intros; inversion H; subst; eauto using step_cont.
+Qed.
+
 Inductive steps_to_cont : StepCont -> Value -> Prop :=
-| step_refl : forall v, steps_to_cont (FinalK v) v
-| step_trans : forall s v, steps_to_cont (apply_k s) v -> steps_to_cont s v.
+| step_final : forall v, steps_to_cont (FinalK v) v
+| step_apply : forall k v' v,
+  steps_to_cont (apply_k k v') v -> steps_to_cont (ApplyK k v') v.
 
 Definition steps_to e env v := steps_to_cont (step e env EmptyK) v.
 
@@ -137,7 +147,7 @@ Inductive type_cont : (StlcType) -> Cont -> StlcType -> Prop :=
 | type_ratork : forall t2 t1 e2 env tenv k t',
   related_env env tenv ->
   type_expr tenv e2 t2 ->
-  type_cont t2 k t' ->
+  type_cont t1 k t' ->
   type_cont (Fn t2 t1) (RatorK e2 env k) t'
 | type_randk : forall t1 t2 t3 v k,
   type_cont t2 k t3 ->
@@ -221,32 +231,46 @@ exact H1.
 exact H2.
 Qed.
 
-Lemma preserve_eval : forall e env tenv k t t',
+Lemma preserve_eval : forall e tenv t',
+  type_expr tenv e t' ->
+  forall env k t,
   related_env env tenv ->
   type_cont t' k t ->
-  type_expr tenv e t' ->
   type_step (step e env k) t.
-intros.
-induction H1.
-simpl.
+intros e tenv t' H.
+induction H; intros; simpl.
 apply (type_apply TUnit).
 apply type_vunit.
 auto.
-simpl.
-case (related_env_compat env env0 H x); intros.
-case (H3 t0); auto; intros.
+case (related_env_compat env0 env H0 x); intros.
+case (H3 t); auto; intros.
 rewrite H4.
-apply (type_apply t0).
-
-Lemma preserve_step : forall t s,
-  type_step s t -> type_step (apply_k s) t.
-intros.
-induction H.
-eauto using type_step.
+apply (type_apply t).
+apply (related_env_equiv env0 env H0 x).
+exact H4.
+exact H.
+exact H1.
 simpl.
-destruct k.
-inversion H0; subst.
-eauto using type_step.
+apply (type_apply (Fn t' t)).
+apply (type_closure _ _ _ env); auto.
+auto.
+apply IHtype_expr1; auto.
+apply (type_ratork _ _ _ _ env); auto.
+Qed.
+
+Lemma preserve_step : forall t k v,
+  type_step (ApplyK k v) t -> type_step (apply_k k v) t.
+intros.
+inversion H; subst; simpl; eauto using type_step.
+inversion H4; subst; eauto using type_step.
+simpl.
+apply (preserve_eval _ tenv t2); eauto using type_cont.
+simpl.
+inversion H4; subst; eauto using type_step.
+inversion H9; subst; eauto using type_step.
+apply (preserve_eval _ (ExtendEnv _ x t' tenv) t0); eauto using type_step.
+eauto using related_env.
+Qed.
 
 Lemma preserve_first : forall e t,
   type_expr (EmptyEnv _) e t 
@@ -258,23 +282,18 @@ unfold step.
 apply (type_apply TUnit).
 eauto using type_value.
 eauto using type_cont.
-contradict H1.
+contradict H0.
 compute.
 discriminate.
 compute.
 apply (type_apply (Fn t' t0)).
 apply (type_closure _ _ _ (EmptyEnv StlcType)).
 auto using related_env.
-inversion H; subst.
-apply H3.
-eauto using type_cont.
-inversion H1; subst.
-contradict H0; discriminate.
-compute.
-apply (type_apply (Fn t1 t)).
-apply (type_closure _ _ _ (EmptyEnv StlcType)).
-auto using related_env.
 auto.
+eauto using type_cont.
+simpl.
+apply (preserve_eval _ (EmptyEnv _) (Fn t1 t));
+eauto using related_env, type_cont.
 Qed.
 
 Lemma preserve_steps_to_cont : forall t s v,
@@ -285,30 +304,74 @@ intros.
 induction H.
 inversion H0; subst; auto.
 apply IHsteps_to_cont.
-apply (preserve_step _ _ (apply_k s)) in H0.
+apply preserve_step.
 apply H0.
-reflexivity.
 Qed.
 
-Theorem type_safe : forall e t v,
-  type_expr (EmptyEnv StlcType) e t
-  -> steps_to e v
-  -> type_value v t.
-intros e t v H.
-inversion H; subst; intros.
-compute in H0.
-apply (preserve_steps_to_cont TUnit) in H0.
-apply H0.
-apply (type_apply TUnit).
-eauto using type_value.
-auto using type_cont.
-compute in H0.
-contradict H0; discriminate.
-compute in H1.
-apply (preserve_steps_to_cont (Fn t' t0)) in H1; auto.
-apply (type_apply (Fn t' t0)).
-apply (type_closure _ _ _ (EmptyEnv _)).
-eauto using related_env.
-auto.
-eauto using type_cont.
+Lemma var_lookup : forall env x v,
+  steps_to (Var x) env v -> lookup x env = Some v.
+intro.
+unfold steps_to.
+induction env; intros.
+inversion H; subst.
+
+destruct (sym_eq_dec x s); subst.
+assert (sym_beq s s = true).
+apply (sym_beq_eq); reflexivity.
+inversion H; subst.
+rewrite H0 in H2.
+inversion H2.
+simpl; rewrite H0.
+rewrite H0 in H1.
+injection H1; intros; subst.
+clear H1.
+inversion H2; subst.
+reflexivity.
+simpl.
+assert (sym_beq x s = false).
+apply (sym_nbeq_neq x s); auto.
+rewrite H1.
+apply IHenv.
+inversion H; subst.
+rewrite H1 in H3.
+destruct (lookup x env); contradict H3; discriminate.
+rewrite H1 in H2.
+simpl.
+destruct (lookup x env).
+injection H2; intros; subst; auto.
+inversion H3; subst.
+simpl in H3.
+eauto using steps_to_cont.
+contradict H2; discriminate.
 Qed.
+
+Theorem type_safe : forall e env tenv t,
+  related_env env tenv ->
+  type_expr tenv e t ->
+  forall v, steps_to e env v -> type_value v t.
+intros e env tenv t H1 H2.
+induction H2; intros.
+compute in H.
+inversion H; subst.
+compute in H4; inversion H4; subst.
+eauto using type_value.
+apply (related_env_equiv env env0 H1 x); auto.
+apply var_lookup; auto.
+compute in H.
+inversion H; subst.
+compute in H5.
+inversion H5; subst.
+apply (type_closure _ _ _ env0); auto.
+
+unfold steps_to in H.
+simpl in H.
+inversion H; subst. 
+
+contradict H2; try discriminate;
+  try destruct (lookup s env); try discriminate.
+assert (forall e k e', FinalK v <> step e env (RatorK e' env k)).
+intro; induction e; intros; simpl; try discriminate;
+  try destruct (lookup s env); try discriminate.
+apply IHe1.
+apply H0.
+
