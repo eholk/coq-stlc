@@ -369,26 +369,38 @@ apply (type_apply t').
 inversion H0; subst; eauto using type_value.
 auto.
 Qed.
-                         
+
 Theorem type_safe : forall e env tenv t,
   related_env env tenv ->
   type_expr tenv e t ->
   forall v, steps_to e env v -> type_value v t.
-intros e env tenv t H1 H2.
-induction H2; intros.
-compute in H.
-inversion H; subst.
-compute in H4; inversion H4; subst.
-eauto using type_value.
-apply (related_env_equiv env env0 H1 x); auto.
-apply var_lookup; auto.
-compute in H.
-inversion H; subst.
-compute in H5.
+intro; induction e; intros; simpl.
+inversion H0; subst.
+inversion H1; subst.
+simpl in H5.
+inversion H5; subst; eauto using type_value.
+
+inversion H0; subst.
+inversion H1; subst.
+contradict H3; destruct (lookup s env); discriminate.
+assert (lookup s env = Some v).
+destruct (lookup s env); try discriminate.
+injection H2; intros; subst.
+inversion H3; subst.
+reflexivity.
+apply (related_env_equiv env tenv H s); auto.
+
+Focus 2.
+inversion H1; subst.
 inversion H5; subst.
-apply (type_closure _ _ _ env0); auto.
+inversion H0; subst.
+apply (type_closure _ _ _ tenv); auto.
 
-unfold steps_to in H.
-simpl in H.
-Check step.
-
+(* Application Line *)
+generalize dependent e2.
+generalize dependent e1.
+intros.
+unfold steps_to in H1.
+apply (preserve_steps_to_cont _ (step (App e1 e2) env EmptyK)); auto.
+apply (preserve_step1 _ _ tenv _ t); eauto using type_cont.
+Qed.
