@@ -345,6 +345,31 @@ eauto using steps_to_cont.
 contradict H2; discriminate.
 Qed.
 
+Lemma preserve_step1 :
+  forall e env tenv k t' t, 
+    related_env env tenv ->
+    type_expr tenv e t' ->
+    type_cont t' k t ->
+    type_step (step e env k) t.
+intro.
+induction e; intros; simpl.
+inversion H0; subst.
+apply (type_apply TUnit); eauto using type_value.
+inversion H0; subst.
+case (related_env_compat env tenv H s); intros.
+case (H3 t'); auto; intros.
+rewrite H5.
+apply (type_apply t').
+apply (related_env_equiv env tenv H s); auto.
+auto.
+inversion H0; subst.
+apply (IHe1 _ tenv _ (Fn t1 t')); auto.
+apply (type_ratork _ _ _ _ tenv); auto.
+apply (type_apply t').
+inversion H0; subst; eauto using type_value.
+auto.
+Qed.
+                         
 Theorem type_safe : forall e env tenv t,
   related_env env tenv ->
   type_expr tenv e t ->
@@ -365,13 +390,5 @@ apply (type_closure _ _ _ env0); auto.
 
 unfold steps_to in H.
 simpl in H.
-inversion H; subst. 
-
-contradict H2; try discriminate;
-  try destruct (lookup s env); try discriminate.
-assert (forall e k e', FinalK v <> step e env (RatorK e' env k)).
-intro; induction e; intros; simpl; try discriminate;
-  try destruct (lookup s env); try discriminate.
-apply IHe1.
-apply H0.
+Check step.
 
