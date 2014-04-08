@@ -308,43 +308,6 @@ apply preserve_step.
 apply H0.
 Qed.
 
-Lemma var_lookup : forall env x v,
-  steps_to (Var x) env v -> lookup x env = Some v.
-intro.
-unfold steps_to.
-induction env; intros.
-inversion H; subst.
-
-destruct (sym_eq_dec x s); subst.
-assert (sym_beq s s = true).
-apply (sym_beq_eq); reflexivity.
-inversion H; subst.
-rewrite H0 in H2.
-inversion H2.
-simpl; rewrite H0.
-rewrite H0 in H1.
-injection H1; intros; subst.
-clear H1.
-inversion H2; subst.
-reflexivity.
-simpl.
-assert (sym_beq x s = false).
-apply (sym_nbeq_neq x s); auto.
-rewrite H1.
-apply IHenv.
-inversion H; subst.
-rewrite H1 in H3.
-destruct (lookup x env); contradict H3; discriminate.
-rewrite H1 in H2.
-simpl.
-destruct (lookup x env).
-injection H2; intros; subst; auto.
-inversion H3; subst.
-simpl in H3.
-eauto using steps_to_cont.
-contradict H2; discriminate.
-Qed.
-
 Lemma preserve_step1 :
   forall e env tenv k t' t, 
     related_env env tenv ->
