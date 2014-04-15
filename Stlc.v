@@ -431,3 +431,121 @@ apply (preserve_step1 _ _ tenv _ t); eauto using type_cont.
 (* Actually, that wasn't so hard, since most of the work was in the
 preservation lemmas. *)
 Qed.
+
+
+(* Unfortunately, the previous theorem isn't strong enough. We can't
+claim that the program does not get stuck. We'll do this now by
+showing that all well-typed terms produce a value. The theorem we
+utlimately want is `evaluates_to_value`, but there will almost
+certainly be some lemmas before then. *)
+
+Lemma step_progress:
+  forall tenv env,
+    related_env env tenv ->
+    forall e t k,
+      type_expr tenv e t ->
+      exists k' v,
+        step e env k = ApplyK k' v.
+intros tenv env H.
+
+induction e; simpl; intros.
+
+(* Unit line *)
+exists k; exists VUnit; auto.
+
+(* Variable line *)
+case (related_env_compat env tenv H s); intros.
+destruct (H2 t); auto.
+inversion H0; auto.
+rewrite H3.
+exists k; exists x; auto.
+
+(* Application line *)
+inversion H0; subst.
+case (IHe1 (Fn t1 t) (RatorK e2 env k)); auto; intros.
+case H1; intros.
+exists x; exists x0; auto.
+
+(* Lambda line *)
+exists k; exists (Closure s e env); auto.
+Qed.
+
+Lemma apply_progress:
+  forall k v t' t,
+    type_cont t' k t ->
+    type_value v t' ->
+    exists s, apply_k k v = s.
+induction k; simpl; auto; intros.
+
+exists (FinalK v).
+inversion H; subst; eauto using type_step.
+
+inversion H; subst.
+case (step_progress tenv e0 H5 e t2 (RandK v k)); auto; intros.
+case H1; intros.
+exists (ApplyK x x0); auto.
+
+inversion H; subst.
+inversion H6; subst.
+assert (related_env (ExtendEnv _ x v0 env) (ExtendEnv _ x t' tenv)).
+eauto using related_env.
+case (step_progress (ExtendEnv _ x t' tenv) (ExtendEnv _ x v0 env) H1 b t2 k);
+auto; intros.
+case H2; intros.
+exists (ApplyK x0 x1); auto.
+Qed.
+
+Lemma eval_rator :
+  forall e1 e2 env k v1 v2 t2 t,
+    steps_to_cont (step e1 env EmptyK) v1 ->
+    type_value v1 (Fn t2 t) ->
+    steps_to_cont (step e2 env EmptyK) v2 ->
+    type_value v2 t2 ->
+    forall v,
+      steps_to_cont (step e2 env (RandK v1 k)) v ->
+      steps_to_cont (step e1 env (RatorK e2 env k)) v.
+induction e1; simpl; intros.
+
+(* Unit line *)
+inversion H; subst.
+inversion H7; subst.
+inversion H0.
+
+(* Variable line *)
+destruct (lookup s env); try inversion H; subst.
+inversion H; inversion H8; subst.
+apply step_apply.
+simpl.
+exact H3.
+
+(* Application line *)
+apply (IHe1_1 _ _ _ v1 v2 t2 t).
+
+Theorem evaluates_to_value :
+  forall tenv env e t,
+    type_expr tenv e t ->
+    related_env env tenv ->
+    exists v, steps_to e env v /\ type_value v t.
+intros.
+unfold steps_to.
+induction H; subst; simpl.
+(* Unit line *)
+exists VUnit; eauto using steps_to_cont, type_value.
+
+(* Variable line *)
+Check related_env_compat.
+case (related_env_compat env env0 H0 x); intros.
+destruct (H2 t); auto.
+rewrite H3.
+exists x0; split; eauto using steps_to_cont.
+Check related_env_equiv.
+apply (related_env_equiv env env0 H0 x); auto.
+
+(* Lambda line *)
+exists (Closure x b env); eauto using steps_to_cont, type_value.
+
+(* Application line. This one seems hard. *)
+case IHtype_expr1; auto; intros.
+destruct H2.
+case IHtype_expr2; auto; intros.
+destruct H4.
