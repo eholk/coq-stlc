@@ -474,16 +474,14 @@ Lemma apply_progress:
   forall k v t' t,
     type_cont t' k t ->
     type_value v t' ->
-    exists s, apply_k k v = s.
-induction k; simpl; auto; intros.
-
-exists (FinalK v).
-inversion H; subst; eauto using type_step.
+    apply_k k v <> Error.
+induction k; simpl; auto; intros; try discriminate.
 
 inversion H; subst.
+Check step_progress.
 case (step_progress tenv e0 H5 e t2 (RandK v k)); auto; intros.
 case H1; intros.
-exists (ApplyK x x0); auto.
+rewrite H2; discriminate.
 
 inversion H; subst.
 inversion H6; subst.
@@ -492,7 +490,7 @@ eauto using related_env.
 case (step_progress (ExtendEnv _ x t' tenv) (ExtendEnv _ x v0 env) H1 b t2 k);
 auto; intros.
 case H2; intros.
-exists (ApplyK x0 x1); auto.
+rewrite H3; discriminate.
 Qed.
 
 Lemma eval_rator :
