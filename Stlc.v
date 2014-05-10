@@ -4,17 +4,17 @@ Require Import Setoid.
 
 (* We start off by defining symbols. 
 
-We leave these largely undefined. Basically, we just need to be able
-to tell whether two symbols are equal.
+We create a module, but leave it uninstantiated.
+ *)
+Module Type Sym.
+  Parameter Symbol: Type.
+  Parameter sym_beq: Symbol -> Symbol -> bool.
 
-I feel like there is a better way to say "We have a type that has
-these properties," but I'm not sure what that is in Coq. I want
-something that's basically type classes. *)
-Definition Symbol := Type.
+  Axiom sym_eq_dec: forall x y: Symbol, decidable (x = y).
+End Sym.
 
-Axiom sym_eq_dec: forall x y: Symbol, decidable (x = y).
-
-Axiom sym_beq: Symbol -> Symbol -> bool.
+Module Stlc (Symbol: Sym).
+Import Symbol.
 
 (* We claim that our boolean equality function corresponds to actual
 equality, and show that this also holds true for disequality. *)
@@ -492,6 +492,8 @@ auto; intros.
 case H2; intros.
 rewrite H3; discriminate.
 Qed.
+
+End Stlc.
 
 Lemma eval_rator :
   forall e1 e2 env k v1 v2 t2 t,
